@@ -9,9 +9,16 @@ new Vue({
       }
     },
     created() {
-      fetch('/api/todo', { 
-        method: 'GET',
-        headers: {'Content-Type': 'application/json'},
+
+      const query = `
+        query { 
+          getTodos { id title done createdAt updatedAt }
+        }
+      `
+      fetch('/graphql', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({query: query})
       })
       .then(response_data => response_data.json()) //парсимо дані, які прийшли з серверу. 
                                                   //(Робимо це для того, щоб за допомогою json() 
@@ -20,58 +27,71 @@ new Vue({
                                                   //Інакше програма не зможе зрозуміти які фрагменти є полями, 
                                                   //оскільки передалася сплошна стрічка.
                                                   //PS. .json() дає можливість з рядка формату json перевести його в формат об'єкту.
-
-      //Витягуємо поле todos, з об'єкту, який передав сервер
-      .then(({todos}) => this.todos = todos)
+      .then(response => { this.todos = response.data.getTodos })
       .catch(err => console.error(err))
     },
     methods: {
+
       addTodo() {
+
         const title = this.todoTitle.trim()
         if (!title) {
           return
         }
-        fetch('/api/todo', {
+
+        const query = `
+            mutation {
+              createTodo(todo: { title: "${title}", done: ${false}}) { id, title, done, createdAt, updatedAt }
+            }
+        `
+        fetch('/graphql', {
           method: 'POST',
-          headers:  { 'Content-Type': 'application/json' }, //Передаємо на сервер json формат даних
-          body: JSON.stringify({ title: title, done: false }),
+          headers:  { 'Content-Type': 'application/json', 'Accept': 'application/json' }, //Хеддер Accept не обов'язковий, оскільки він вказує на те, що ми маємо приймати json, хоча і так його в любому випадку приймаємо від graphql
+          body: JSON.stringify({query: query}),
         })
         .then(response_data => response_data.json())
-        //Витягуємо поле todo, з об'єкту, який прийшов від сервера. Ex: const { title,password } = req.body;
-        .then(({todo}) => { this.todos.push(todo) }) //пушимо в масив, який відповідає за вивід цих даних на екран (реалізація у vue, ми до цього не причетні)
+        .then(response => { this.todos.push(response.data.createTodo) })
         .catch(error => console.error(error))
         this.todoTitle = ''
+
       },
       completeTodo(id) {
-        //console.log("PASSED", id)
-        fetch('/api/todo/' + id, {
-          method: 'PUT',
-          headers: {'Content-Type': 'application/json'}, //Без цього хедера ми не зможемо зрозуміти в якому форматі прийшли данні.
-          //body: JSON.stringify({done:true})
+        const query = `
+            mutation { 
+              completedTodo(id: ${id}) { updatedAt }
+            }
+        `
+        fetch('/graphql', {
+          method: 'POST', //В роботі з graphql завжди вказуємо метод post (навіть якщо це get або що)
+          headers: {'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({query})
         })
         .then(response_data => response_data.json())
-        .then(({todo}) => {
+        .then(response => {
 
-          const indx = this.todos.findIndex(t => t.id === todo.id)
-          console.log(indx)
-          this.todos[indx].updatedAt = todo.updatedAt
+          const indx = this.todos.findIndex(t => t.id === id)
+
+          this.todos[indx].updatedAt = response.data.completedTodo.updatedAt
 
         })
         .catch(err => { console.error(err) })
       },
       removeTodo(id) {
-
-        fetch('/api/todo/' + id, {
-          method: 'DELETE',
-          headers: {'Content-Type': 'application/json'}
+        const query = `
+          mutation { 
+            deletingTodo(id: ${id})
+          }  
+        `
+        fetch('/graphql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({query})
         }) 
-        //Парсити немає що, тому .. => ..json() не пишимо (Глянути метод delete в роутах, для кращого розуміння)
         .then(() => { 
           console.log("Deleting was succefull")
-          this.todos = this.todos.filter(t => t.id !== id) //Переприсвоюємо todo кожного разу як видаляємо новий елемент (для того, щоб оновити дані).
+          this.todos = this.todos.filter(t => t.id !== id)
         })
         .catch(err => { console.error(err) })
-        //console.log(this.todos)
       }
     },
     filters: {
@@ -91,7 +111,7 @@ new Vue({
           options.minute = '2-digit',
           options.second = '2-digit'
         }
-        return new Intl.DateTimeFormat('ua-UA', options).format(new Date(value))
+        return new Intl.DateTimeFormat('ua-UA', options).format(new Date(+value))
       }
     }
 })
