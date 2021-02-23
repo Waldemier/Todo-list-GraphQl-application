@@ -1,3 +1,3 @@
-# TodoList
+# Todo-list-GraphQl-application
 
-NodeJS rest api application with usage mysql database
+Stack: GraphQl, Express, MySql
